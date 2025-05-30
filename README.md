@@ -16,7 +16,7 @@ Declarative dotfiles management using GNU Stow and Nix/NixOS.
 ### 1. Add to your flake inputs
 
 ```nix
-inputs.stow-nix.url = "github:yourusername/stow-nix";
+inputs.stow-nix.url = "github:lonerOrz/stow-nix";
 ````
 
 ### 2. Import the module in your NixOS configuration
@@ -27,7 +27,7 @@ inputs.stow-nix.url = "github:yourusername/stow-nix";
 
   programs.stow = {
     enable = true;
-    dotfilesDir = "/home/youruser/dotfiles";
+    dotfilesDir = "/home/${username}/dotfiles";
     packages = [ "nvim" "bash" ];
   };
 }
@@ -65,7 +65,6 @@ Includes:
 
 * stow
 * nixpkgs-fmt
-* nixd
 * nil
 
 ## License
