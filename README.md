@@ -87,6 +87,13 @@ For formatting and testing:
 nix develop
 ```
 
+## 📝 TODO
+
+- [ ] Improve argument parsing reliability.
+  - [ ] Add support for package names containing spaces.
+- [ ] Enhance symlinking reliability (perhaps with a Python-based implementation).
+- [ ] Implement a test suite to verify module behavior.
+
 ## License
 
 MIT
