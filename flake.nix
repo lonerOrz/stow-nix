@@ -16,11 +16,6 @@
       pkgs = import nixpkgs {inherit system;};
     in {
       packages.stow = pkgs.stow;
-      packages.dotstow = pkgs.writeShellApplication {
-        name = "dotstow";
-        runtimeInputs = [pkgs.stow];
-        text = builtins.readFile ./scripts/apply-dotfiles.sh;
-      };
 
       nixosModules.default = import ./modules/stow-nix.nix {inherit pkgs;};
       devShells.default = import ./devShell.nix {inherit pkgs;};

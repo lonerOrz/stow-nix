@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DOTFILES_DIR="${DOTFILES_DIR:-$HOME/dotfiles}"
-TARGET_DIR="${TARGET_DIR:-$HOME}"
-PACKAGES=(${STOW_PACKAGES:-})
+user="$1"
+dotPath="$2"
+targetHome="$3"
+backupSuffix="$4"
+shift 4
+packages=("$@")
 
-if [ ! -d "$DOTFILES_DIR" ]; then
-  echo "Error: DOTFILES_DIR '$DOTFILES_DIR' does not exist."
+if [ ! -d "${dotPath}" ]; then
+  echo "stow-nix: Error: dotPath '${dotPath}' does not exist for user ${user}" >&2
   exit 1
 fi
 
-if [ "${#PACKAGES[@]}" -eq 0 ]; then
-  echo "Error: No STOW_PACKAGES provided."
-  exit 1
-fi
+echo "stow-nix: Applying stow for user ${user}, packages: ${packages[*]}"
+stow --dir="${dotPath}" --target="${targetHome}" --backup-suffix="${backupSuffix}" --stow "${packages[@]}"
 
-exec stow --dir="$DOTFILES_DIR" --target="$TARGET_DIR" "${PACKAGES[@]}"
+echo "stow-nix: Stow completed successfully for ${user}"

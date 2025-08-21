@@ -1,64 +1,95 @@
 {
-  pkgs,
   config,
   lib,
+  pkgs,
   ...
-}: let
+}:
+
+let
   cfg = config.programs.stow;
-  scriptFile =
-    if cfg.dotfilesScript != null
-    then cfg.dotfilesScript
-    else
-      pkgs.writeShellScript "apply-dotfiles.sh" ''
-        #!/usr/bin/env bash
-        set -euo pipefail
 
-        DOTFILES_DIR="${cfg.dotfilesDir}"
-        TARGET_DIR="$HOME"
+  userOptions =
+    { name, ... }:
+    {
+      options = {
+        enable = lib.mkEnableOption "Enable stow for ${name}";
 
-        if [ ! -d "$DOTFILES_DIR" ]; then
-          echo "Error: dotfilesDir '$DOTFILES_DIR' does not exist."
-          exit 1
-        fi
+        dotPath = lib.mkOption {
+          type = lib.types.str;
+          description = ''
+            Path to the stow directory, e.g., "~/.dotfiles".
+            "~/" will be expanded to the user's home directory.
+          '';
+          example = "~/.dotfiles";
+        };
 
-        ${pkgs.stow}/bin/stow \
-          --dir="$DOTFILES_DIR" \
-          --target="$TARGET_DIR" \
-          ${lib.concatStringsSep " " cfg.packages}
-      '';
-in {
+        backupSuffix = lib.mkOption {
+          type = lib.types.str;
+          default = "bak";
+          description = "Suffix for backup files created by stow.";
+        };
+
+        group = lib.mkOption {
+          type = lib.types.attrsOf lib.types.bool;
+          default = { };
+          description = ''
+            Attribute set of packages to stow, where the value is a boolean.
+            Example: { nvim = true; git = false; }
+          '';
+          example = "{ nvim = true; }";
+        };
+      };
+    };
+
+  isAnyUserEnabled = lib.any (user: user.enable) (lib.attrValues cfg.users);
+
+in
+{
   options.programs.stow = {
-    enable = lib.mkEnableOption "Enable stow-nix dotfiles management";
-
-    dotfilesDir = lib.mkOption {
-      type = lib.types.path;
-      description = "Absolute path to the dotfiles directory";
-    };
-
-    packages = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
-      default = [];
-      description = "List of stow package directories inside dotfilesDir";
-    };
-
-    dotfilesScript = lib.mkOption {
-      type = lib.types.nullOr lib.types.path;
-      default = null;
-      description = "Optional custom script for dotfiles application";
-    };
-
-    installStow = lib.mkOption {
-      type = lib.types.bool;
-      default = true;
-      description = "Whether to install GNU Stow system-wide";
+    users = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.submodule userOptions);
+      default = { };
+      description = "Configure stow for each user.";
     };
   };
 
-  config = lib.mkIf cfg.enable {
-    environment.systemPackages = lib.optional cfg.installStow pkgs.stow;
+  config =
+    lib.mkMerge (
+      lib.mapAttrsToList (
+        userName: userCfg:
+        let
+          userHome = config.users.users.${userName}.home;
+          enabledPackages = lib.attrNames (lib.filterAttrs (_: v: v) userCfg.group);
+          resolvedDotPath =
+            if lib.strings.hasPrefix "~/" userCfg.dotPath then
+              userHome + (lib.strings.removePrefix "~/" userCfg.dotPath)
+            else
+              userCfg.dotPath;
+          stowScript = pkgs.writeShellScript "apply-dotfiles-${userName}.sh" (
+            builtins.readFile ./scripts/apply-dotfiles.sh
+          );
+        in
+        lib.mkIf userCfg.enable {
+          systemd.services."stow-nix-${userName}" = {
+            description = "Apply stow dotfiles for user ${userName}";
+            serviceConfig = {
+              Type = "oneshot";
+              User = userName;
+              Group = config.users.users.${userName}.group;
+              ExecStart = "${stowScript} ${userName} ${resolvedDotPath} ${userHome} ${userCfg.backupSuffix} ${lib.concatStringsSep " " enabledPackages}";
+            };
+          };
 
-    environment.etc."apply-dotfiles.sh".source = scriptFile;
-
-    systemd.tmpfiles.rules = ["L+ /etc/apply-dotfiles.sh 0755 root root -"];
-  };
+          system.activationScripts."stow-nix-trigger-${userName}" = {
+            deps = [ "systemd-units" ];
+            text = ''
+              ${pkgs.systemd}/bin/systemctl start stow-nix-${userName}.service
+            '';
+          };
+        }
+      ) cfg.users
+    )
+    // {
+      environment.systemPackages = lib.mkIf isAnyUserEnabled [ pkgs.stow ];
+    };
 }
